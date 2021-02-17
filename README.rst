@@ -3,17 +3,31 @@ parish_scraper
 ==============
 
 
-Add a short description here!
+A collection of web-scraping bots which collect burial data from transcribed parish records.
 
+Install:
+========
+1. clone
+2. ``pip install -r requirements.txt``
+3. install chromedriver: https://chromedriver.chromium.org/downloads, ensure version matches chrome.
+4. reccomended: modify chromedriver.exe to obfuscate selenium. 
 
-Description
-===========
+To modify chromedriver.exe, in command line:
+============================================
+1. ``vim <path to chromedriver.exe>``
+2. ``:%s/cdc_/abc_/g``
+3. ``:wq!`` and press ``return``
 
-A longer description of your project goes here...
-
-
-Note
+Use:
 ====
+FamilySearch.org
+================
+1. add environment variables: ``FS_USERNAME`` and ``FS_PASSWORD``.
+2. as code:
+  ``bot = FamilySearchScraper()``
+  
+  ``bot.authenticate()``
+  
+  ``bot.get_burial_records(<place_name>, <start_year>, <end_year>)``
 
-This project has been set up using PyScaffold 3.2.3. For details and usage
-information on PyScaffold see https://pyscaffold.org/.
+
