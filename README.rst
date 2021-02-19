@@ -30,4 +30,10 @@ FamilySearch.org
   
   ``bot.get_burial_records(<place_name>, <start_year>, <end_year>)``
 
+To-do:
+======
+- Include location in FamilySearch scraped data
+- Ancestry bot
+- Tests
+
 
