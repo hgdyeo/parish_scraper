@@ -256,7 +256,7 @@ class FamilySearchScraper:
         '''
         Close chromedriver.
         '''
-        driver = self.is_authenticated
+        driver = self.authenticated_driver
         if driver:
             driver.close()
         
