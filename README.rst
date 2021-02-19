@@ -29,6 +29,10 @@ FamilySearch.org
   ``bot.authenticate()``
   
   ``bot.get_burial_records(<place_name>, <start_year>, <end_year>)``
+  
+Ancestry.co.uk
+==============
+WARNING: automated software such as this violates Ancestry's use of services agreement. 
 
 To-do:
 ======
