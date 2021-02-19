@@ -6,7 +6,7 @@ Class: AncestryScraper
 A selenium-based webscraping bot which gathers parish records from Ancestry.co.uk.
 '''
 
-
+#%%
 import os
 
 from bs4 import BeautifulSoup
@@ -15,6 +15,8 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
+from selenium.common.exceptions import NoSuchElementException, StaleElementReferenceException
+
 
 
 def boot_up_driver():
@@ -77,6 +79,82 @@ def sign_in(driver, username, password):
     return driver
 
 
+def when_dom_static(driver, xpath, timeout=15, to_send='click'):
+    '''
+    Attempts to interact with an element on a page until the page has stopped changing.
+    '''
+    no_success = True
+    while no_success:
+        try:
+            element = WebDriverWait(driver, timeout).until(EC.presence_of_element_located((By.XPATH, xpath)))
+            if to_send == 'click':
+                element.click()
+            else:
+                try:
+                    element.send_keys(to_send)
+                except:
+                    raise ValueError('Invalid Keys object.')
+            no_success = False
+        except:
+            continue
+
+    return driver
+
+
+def collect_urls(driver, urls, option_names):
+    '''
+    '''
+    url_key = tuple(option_names)
+    ignored_exceptions=(NoSuchElementException,StaleElementReferenceException,)
+    num_browse_levels = len(option_names)
+    year_range_xpath = r'//*[@id="divBL_{}"]/div/ul/li'.format(num_browse_levels)
+    try:
+        urls_li_list     = WebDriverWait(driver, 20, ignored_exceptions=ignored_exceptions)\
+                        .until(EC.presence_of_all_elements_located((By.XPATH, year_range_xpath)))
+        urls_list        = [WebDriverWait(element, 15, ignored_exceptions=ignored_exceptions)\
+                        .until(EC.presence_of_element_located((By.XPATH, 'a'))) for element in urls_li_list]
+        urls_dict        = {element.text : element.get_attribute('href') for element in urls_list}
+    # If no urls are displayed:
+    except:
+        urls_dict = {}
+
+    return driver, urls_dict
+
+
+def drop_down(driver, xpaths_bl, option_names=[]):
+    global urls
+    if not xpaths_bl:
+        driver, urls_dict = collect_urls(driver, urls, option_names)
+        # Update urls with date-ranges and hrefs
+        urls[url_key] = urls_dict
+    else:
+        xpath_level_name           = xpaths_bl[0] + r'/label'
+        xpath_select               = xpaths_bl[0] + r'/div/select'
+        xpath_options              = xpath_select + r'/option'
+        x = True
+        # Sometimes, webpage becomes stuck loading the next options drop-down box. If this happens, refresh and try again.
+        while x:
+            try:
+                highest_level_options = WebDriverWait(driver, 10).until(EC.presence_of_all_elements_located((By.XPATH, xpath_options)))[1:]
+                x = False
+            except:
+                driver.refresh()
+                continue
+        highest_level_option_names = [option.text for option in highest_level_options]
+        for option, option_name in zip(highest_level_options, highest_level_option_names):
+            driver = when_dom_static(driver, xpath_select, timeout=15, to_send='click')
+            driver = when_dom_static(driver, xpath_select, timeout=15, to_send=Keys.DOWN)
+            driver = when_dom_static(driver, xpath_select, timeout=15, to_send=Keys.ENTER)
+            option_names_copy = option_names.copy()
+            option_names_copy.append(option_name)
+            if xpaths_bl[:-1]:
+                drop_down(driver, xpaths_bl[1:], option_names_copy)
+            else:
+                drop_down(driver, xpaths_bl[:-1], option_names_copy)
+    
+    return driver, urls
+
+
 class AncestryScraper:
     '''
     A selenium-based bot which scrapes parish data from ancestry.co.uk.
@@ -84,6 +162,7 @@ class AncestryScraper:
 
     def __init__(self):
         self.authenticated_driver = None
+        self.county_urls = None
 
 
     def authenticate(self):
@@ -95,7 +174,8 @@ class AncestryScraper:
         USERNAME = os.getenv('ANC_USERNAME', None)
         PASSWORD = os.getenv('ANC_PASSWORD', None)
         if not (USERNAME and PASSWORD):
-            raise AuthenticationError('No username and/or password found in environment variables. Ensure these are set before attempting to authenticate.')
+            raise AuthenticationError('No username and/or password found in environment variables. \
+                Ensure these are set before attempting to authenticate.')
         driver = boot_up_driver()
         # Go to sign in page, accept cookies, sign in.
         driver.get('https://www.ancestry.co.uk/secure/login')
@@ -114,6 +194,30 @@ class AncestryScraper:
             return False
 
 
+    def get_parish_urls(self, driver, collection_code):
+        '''
+        Collects the urls to the image viewer pages with transcribed records for collection with code 'collection_code'.
+        Updates self.county_urls to be a dictionary: {<record place and/or type> (tuple) : {<year range> : <url>} (dict)}
+        Returns WebDriver.Chrome at welcome page.
+        '''
+        # Go to collection url
+        url_collection = r'https://www.ancestry.co.uk/search/collections/{}/'.format(collection_code)
+        driver.get(url_collection)
+        # Check the "Browse this collection" box is displayed.
+        xpath_browse_box = r'//*[@id="divBrowse"]'
+        try:
+            browse_box = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH, xpath_browse_box)))
+        except:
+            raise NotFoundError('Either {} is not a valid ID or the collection cannot be browsed in the image viewer.')
+        xpaths_bl = [r'//*[@id="browseControls"]/div[{}]'.format(i) for i in range(1, len(browse_levels) + 1)]
+        urls = {}
+        driver, urls = drop_down(driver, xpaths_bl)
+        self.county_urls = urls
+        driver.get(r'https://www.ancestry.co.uk')
+
+        return driver
+
+
     def shut_down(self):
         '''
         Close chromedriver.
@@ -123,4 +227,5 @@ class AncestryScraper:
             driver.close()
         
         return None
+
 
