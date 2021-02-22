@@ -223,9 +223,7 @@ class FamilySearchScraper:
                 while not success:
                     try:
                         spinner = shadow.find_element(r'fs-spinner')
-                        print(bool(spinner.get_attribute('style')))
                         table_displayed = WebDriverWait(driver, 10).until(lambda x : bool(spinner.get_attribute('style')))
-                        print(bool(spinner.get_attribute('style')))
                         sr_table = shadow.find_element(r'div.table')
                         success = True
                     except:
