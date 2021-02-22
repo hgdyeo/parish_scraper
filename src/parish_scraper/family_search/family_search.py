@@ -5,7 +5,7 @@ Created: 2021-01-20
 Class: FamilySearchScraper.
 A selenium-based webscraping bot which gathers burial data from FamilySearch.org.
 '''
-#%% Imports etc
+
 import numpy as np
 import pandas as pd
 import requests
@@ -28,6 +28,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from pyshadow.main import Shadow
 
+
 def boot_up_driver():
     '''
     Boots up chromedriver with minimal detectability.
@@ -35,18 +36,14 @@ def boot_up_driver():
     '''
     # Change settings to minimize detectability
     option = webdriver.ChromeOptions()
-
     # For older ChromeDriver under version 79.0.3945.16
     option.add_experimental_option("excludeSwitches", ["enable-automation"])
     option.add_experimental_option('useAutomationExtension', False)
-
     #For ChromeDriver version 79.0.3945.16 or over
     option.add_argument('--disable-blink-features=AutomationControlled')
-
     # Change resolution and user-agent
     option.add_argument("window-size=1280,800")
     option.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/74.0.3729.169 Safari/537.36")
-
     #Open Browser
     driver = webdriver.Chrome(executable_path='chromedriver.exe',options=option)
     driver.maximize_window()
@@ -70,15 +67,12 @@ def sign_in(driver, username, password):
     xpath_username = r'//*[@id="userName"]'
     xpath_password = r'//*[@id="password"]'
     xpath_signin  = r'//*[@id="login"]'
-
     user_input = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH,xpath_username)))
     pass_input = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH,xpath_password)))
     signin_button = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH,xpath_signin)))
-
     user_input.send_keys(username)
     pass_input.send_keys(password)
     signin_button.click()
-
     time.sleep(5)
 
     if driver.current_url != r'https://www.familysearch.org/':
@@ -87,24 +81,42 @@ def sign_in(driver, username, password):
     return driver
 
 
-def scrape_table(table):
+def scrape_table(shadow_driver, table):
     '''
     Returns Name and Date data contained within the web element table.
     '''
     rows = table.find_elements_by_tag_name(r'div')
-    table_data = []
+    # table_data = []
+    names = []
+    dates = []
+    places = []
     for row in rows[1:]:
-        cell_name = row.find_elements_by_css_selector(r'span > sr-cell-name') 
-        cell_other = row.find_elements_by_css_selector(r'span > span')[1:-2]
-        cell_name_text = [cell.get_attribute('name') for cell in cell_name]
-        cell_other_text = [cell.text.replace('\n',' ') for cell in cell_other]
+        cell_name = row.find_element_by_css_selector(r'span > sr-cell-name') 
+        cell_name_text = cell_name.get_attribute('name')
+        cell_event = row.find_element_by_css_selector(r'span > sr-cell-events')
 
-        p = re.compile('([0-9]*\s+[A-Za-z]*\s+[0-9]+|[0-9]{4})')
-        cell_other_text[0] = p.findall(cell_other_text[0])[0]
+        cell_event_types = shadow_driver.find_elements(cell_event, r'span.event-type')
+        cell_event_texts = [event_type.text for event_type in cell_event_types]
+        
+        cell_dates = shadow_driver.find_elements(cell_event, r'span.event-date')
+        cell_date_texts = [cell_date.text for cell_date in cell_dates]
 
-        row_data = cell_name_text + cell_other_text
-        table_data.append(row_data)
-    
+        cell_places = shadow_driver.find_elements(cell_event, r'span.event-place')
+        cell_place_texts = [cell_place.text for cell_place in cell_places]
+
+        cell_info = list(zip(cell_event_texts, cell_date_texts, cell_place_texts))
+        # Take only burial info
+        pattern = re.compile(r'(B|b)urial')
+        burial_info = [info for info in cell_info if pattern.match(info[0])]
+        if burial_info:
+            burial_date = burial_info[0][1]
+            burial_place = burial_info[0][2]
+            dates.append(burial_date)
+            places.append(burial_place)
+            names.append(cell_name_text)
+
+    table_data = {'Name' : names, 'Date' : dates, 'Place' : places}
+
     return table_data
 
         
@@ -141,7 +153,6 @@ class FamilySearchScraper:
     def __init__(self):
         self.authenticated_driver = None
 
-
     def authenticate(self):
         # Sign in details
         USERNAME = os.getenv('FS_USERNAME', None)
@@ -155,13 +166,12 @@ class FamilySearchScraper:
         # Go to URL
         url_signin = r'https://www.familysearch.org/auth/familysearch/login'
         driver.get(url_signin)
-        
         driver = sign_in(driver, USERNAME, PASSWORD)
 
         # Occasionally, an invitation to complete a survey appears now. If so, dismiss it.
         xpath_survey_button = r'//*[@id="pagekey__home__lihp_arches"]/div[5]/div[2]/div/div[3]/button[2]'
         try:
-            no_survey_button = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH, xpath_survey_button)))
+            no_survey_button = WebDriverWait(driver, 3).until(EC.presence_of_element_located((By.XPATH, xpath_survey_button)))
             no_survey_button.click()
         except:
             pass
@@ -172,7 +182,6 @@ class FamilySearchScraper:
         self.authenticated_driver = driver
 
         return driver
-
 
     def get_burial_records(self, place_name, year_from, year_to):
         '''
@@ -197,47 +206,49 @@ class FamilySearchScraper:
                 params = {
                         'q.deathLikePlace'                : '{}'.format(place_name),
                         'q.deathLikePlace.exact'          : 'on',
-                        'q.deathLikeDate.from'            : '{}'.format(year_from),
-                        'q.deathLikeDate.to'              : '{}'.format(year_to),
+                        'q.deathLikeDate.from'            : '{}'.format(year),
+                        'q.deathLikeDate.to'              : '{}'.format(year),
                         'm.defaultFacets'                 : 'on',
                         'm.queryRequireDefault'           : 'on',
                         'm.facetNestCollectionInCategory' : 'on',
                         'count'                           : '100',
                         'offset'                          : '{}'.format(offset)
                         }
-
                 base_results_url  = r'https://www.familysearch.org/search/record/results/?'
                 query_results_url = base_results_url + urlencode(params)
                 driver.get(query_results_url)
-
+                
                 shadow = QuietShadow(driver)
-                spinner = shadow.find_element(r'fs-spinner')
-
-                table_displayed = WebDriverWait(driver, 100).until(lambda x : bool(spinner.get_attribute('style')))
-                try:
-                    sr_table = shadow.find_element(r'div.table')
-                except:
-                    table_displayed = False
+                success = False
+                while not success:
+                    try:
+                        spinner = shadow.find_element(r'fs-spinner')
+                        print(bool(spinner.get_attribute('style')))
+                        table_displayed = WebDriverWait(driver, 10).until(lambda x : bool(spinner.get_attribute('style')))
+                        print(bool(spinner.get_attribute('style')))
+                        sr_table = shadow.find_element(r'div.table')
+                        success = True
+                    except:
+                        driver.refresh()
 
                 if table_displayed:
                     # Try finding the number of results
-                    if max_offset:
+                    if not max_offset:
                         try:
                             max_offset = get_max_offset(shadow)
                         # If exception thrown, assume no results found.
                         except:
                             break
                     
-                    table_data = scrape_table(sr_table)
+                    table_data = scrape_table(shadow, sr_table)
 
                     # Make DataFrame:
-                    column_names = ['Name', 'Date']
-                    df = pd.DataFrame(table_data, columns=column_names)
+                    df = pd.DataFrame(table_data)
                     dfs_year.append(df)
 
                 offset += 100
                 more_pages = (offset <= max_offset)
-
+                
             # If there are any results for that year, concatenate them and append to list_dfs
             if dfs_year:
                 df_year = pd.concat(dfs_year, axis=0, ignore_index=True)
@@ -251,7 +262,6 @@ class FamilySearchScraper:
 
         return df_all 
 
-
     def shut_down(self):
         '''
         Close chromedriver.
@@ -263,5 +273,3 @@ class FamilySearchScraper:
         return None
 
 
-
-# %%
