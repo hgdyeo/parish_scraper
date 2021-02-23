@@ -155,6 +155,119 @@ def drop_down(driver, xpaths_bl, option_names=[]):
     return driver, urls
 
 
+def get_useful_elements(driver):
+    '''
+    Returns a dictionary of useful image viewer page elements.
+    '''
+    # Button panel
+    xpath_buttons       = r'//*[@class="paging-wrapper"]'
+    buttons_panel       = WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.XPATH, xpath_buttons)))
+    # Button to reveal table
+    xpath_table_buttons = r'./button'
+    table_button        = WebDriverWait(buttons_panel, 15).until(EC.presence_of_all_elements_located((By.XPATH, xpath_table_buttons)))[-1]
+    # Next page button
+    css_next_page       = r'button.page'
+    next_page_button    = WebDriverWait(driver, 15).until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, css_next_page)))[-1]
+    # Number of pages
+    css_pages           = r'span.imageCountText.middle'
+    num_pages           = WebDriverWait(buttons_panel, 15).until(EC.presence_of_element_located((By.CSS_SELECTOR, css_pages))).text
+    # Index panel
+    css_index_panel     = r'div.index-panel'
+    index_panel         = WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.CSS_SELECTOR, css_index_panel)))
+ 
+    elements = {'buttons_panel'   : buttons_panel,
+               'table_button'     : table_button,
+               'next_page_button' : next_page_button,
+               'num_pages'        : num_pages,
+               'index_panel'      : index_panel}
+
+    return elements
+
+
+def get_table_html(driver, **kwargs):
+    '''
+    For a given image viewer page, returns the inner html of the grid container.
+    '''
+    buttons_panel    = kwargs['buttons_panel']
+    table_button     = kwargs['table_button']
+    next_page_button = kwargs['next_page_button']
+    num_pages        = kwargs['num_pages']
+    index_panel      = kwargs['index_panel']
+    
+    if not table_button.is_enabled():
+        grid_container_html = None
+    else:
+        css_grid_container   = r'div.grid-container'
+        grid_container       = WebDriverWait(index_panel, 15).until(EC.presence_of_element_located((By.CSS_SELECTOR,css_grid_container)))
+        grid_container_html  = grid_container.get_attribute('innerHTML')
+
+    return driver, grid_container_html
+
+
+def make_grid_container_df(grid_container):
+    '''
+    Returns pandas.DataFrame containing the data within grid_container html.
+    '''
+    soup = BeautifulSoup(grid_container, 'html.parser')
+    rows          = soup.find_all('div', {'class':'grid-row'})
+    columns_html  = rows[0].findChildren('div')
+    elements_html = [row.findChildren('div') for i, row in enumerate(rows) if i >= 1]
+    columns       = [column.text for column in columns_html]
+    elements      = []
+    for i in range(len(elements_html)):
+        element_row_html = elements_html[i]
+        row_elements     = [element.text for element in element_row_html]
+        elements.append(row_elements)
+        df = pd.DataFrame(elements, columns=columns)
+    
+    return df
+
+
+def scrape_record(driver, record_url):
+    '''
+    Scrape index panel data from parish collection at collection_url using driver.
+    Driver must be authenticated (if not, call athuenticate() before calling this function).
+    Progress is printed.
+    Returns: Tuple (driver, complete DataFrame for that collection)
+    '''
+    # Go to webpage for the collection
+    driver.get(record_url)
+
+    elements         = get_useful_elements(driver)
+    next_page_button = elements['next_page_button']
+    not_last_page    = True
+    counter          = 1
+
+    grid_containers  = []
+    df_list          = []
+    prev_grid_container = None     
+    # Scrape the grid containers
+    while not_last_page:
+        elements                    = get_useful_elements(driver)
+        driver, grid_container_html = get_table_html(driver, **elements)
+        if grid_container_html and grid_container_html != prev_grid_container:
+            grid_containers.append(grid_container_html)
+            prev_grid_container = grid_container_html
+            not_last_page       = next_page_button.is_enabled()
+            if not_last_page:
+                next_page_button.click()
+        else:
+            continue
+
+    # Now use BeautifulSoup to turn the html into a dataframe
+    for grid_container in grid_containers:
+        df = make_grid_container_df(grid_container)
+        df_list.append(df)
+
+    # Concatenate all dataframes into a final dataframe
+    if df_list:
+        df_concat = pd.concat(df_list, ignore_index=True).drop_duplicates().reset_index(drop=True)
+    else:
+        df_concat = pd.DataFrame([], columns = [])
+
+    return driver, df_concat
+
+
 class AncestryScraper:
     '''
     A selenium-based bot which scrapes parish data from ancestry.co.uk.
@@ -163,7 +276,6 @@ class AncestryScraper:
     def __init__(self):
         self.authenticated_driver = None
         self.county_urls = None
-
 
     def authenticate(self):
         '''
@@ -193,7 +305,6 @@ class AncestryScraper:
             driver.quit()
             return False
 
-
     def get_parish_urls(self, driver, collection_code):
         '''
         Collects the urls to the image viewer pages with transcribed records for collection with code 'collection_code'.
@@ -217,7 +328,6 @@ class AncestryScraper:
 
         return driver
 
-
     def shut_down(self):
         '''
         Close chromedriver.
@@ -227,5 +337,4 @@ class AncestryScraper:
             driver.close()
         
         return None
-
 
