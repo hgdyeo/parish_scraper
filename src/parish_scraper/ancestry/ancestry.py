@@ -284,6 +284,32 @@ def scrape_record(driver, record_url):
     return driver, df_concat
 
 
+def sort_dict(dictionary):
+    '''
+    Sorts dictionary by length of value.
+    '''
+    def my_key(element):
+        return len(element[-1])
+
+    list_dict = list(dictionary.items())
+    list_dict.sort(key=my_key)
+    sorted_dict = dict(list_dict)
+    
+    return sorted_dict
+
+
+def partition_dict(dictionary, n_partitions):
+    '''
+    Partitions a dictionary into n_partitions of approximately equal length.
+    '''
+    list_of_dicts = [[] for i in range(n_partitions)]
+    for i, item in enumerate(dictionary.items()):
+        list_of_dicts[i % n_partitions].append(item)
+    list_of_dicts = [dict(d) for d in list_of_dicts]
+    
+    return list_of_dicts
+
+
 class AncestryScraper:
     '''
     A selenium-based bot which scrapes parish data from ancestry.co.uk.
@@ -315,11 +341,11 @@ class AncestryScraper:
         if 'Welcome,' in welcome.text:
             print('Successfully logged in.')
             self.authenticated_driver = driver
-            return driver
         else:
-            raise AuthenticationError('Something went wrong.')
             driver.quit()
-            return False
+            raise AuthenticationError('Something went wrong.')
+            
+        return 
 
     def get_parish_urls(self, driver, collection_code):
         '''
@@ -346,6 +372,21 @@ class AncestryScraper:
 
         return driver
 
+    def scrape_collection(self, n_jobs=1):
+        '''
+        Scrapes all records in a collection with urls contained in self.collection_urls.
+        Returns Pandas.DataFrame.
+        '''
+        if not self.authenticated_driver:
+            raise AuthenticationError('Please authenticate before attempting to collect urls.')
+        else:
+            driver = self.authenticated_driver
+        collection_urls = self.collection_urls
+        if not collection_urls:
+            return None
+        
+        scraped_dfs = []
+
     def scrape_collection(self):
         '''
         Scrapes all records in a collection with urls contained in self.collection_urls.
@@ -355,11 +396,11 @@ class AncestryScraper:
             raise AuthenticationError('Please authenticate before attempting to collect urls.')
         else:
             driver = self.authenticated_driver
-        series_urls = self.collection_urls
-        if not series_urls:
+        collection_urls = self.collection_urls
+        if not collection_urls:
             return None
         collection_dfs = []
-        for labels, url_dict in series_urls.items():
+        for labels, url_dict in collection_urls.items():
             record_dfs = []
             for date_range, url in url_dict.items():
                 driver, df_record = scrape_record(driver, url)
@@ -371,7 +412,7 @@ class AncestryScraper:
             collection_dfs.append(df_label)
         df_collection = pd.concat(collection_dfs, axis=0, ignore_index=True)
 
-        return df_collection   
+        return df_collection  
 
     def shut_down(self):
         '''
@@ -382,5 +423,4 @@ class AncestryScraper:
             driver.close()
         
         return None
-
-
+# %%
