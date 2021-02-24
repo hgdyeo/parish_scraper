@@ -6,8 +6,8 @@ Class: AncestryScraper
 A selenium-based webscraping bot which gathers parish records from Ancestry.co.uk.
 '''
 
-#%%
 import os
+import pandas as pd
 
 from bs4 import BeautifulSoup
 from selenium import webdriver    # conda install selenium
@@ -103,6 +103,8 @@ def when_dom_static(driver, xpath, timeout=15, to_send='click'):
 
 def collect_urls(driver, urls, option_names):
     '''
+    Once visible, collect the urls for image viewers for the given option names.
+    Returns driver, url_key (tuple), urls_dict (dict: {<date range> : <url>,...}).
     '''
     url_key = tuple(option_names)
     ignored_exceptions=(NoSuchElementException,StaleElementReferenceException,)
@@ -118,29 +120,43 @@ def collect_urls(driver, urls, option_names):
     except:
         urls_dict = {}
 
-    return driver, urls_dict
+    return driver, url_key, urls_dict
+
+
+def get_browse_labels(driver):
+    '''
+    Returns the labels (tuple) for each drop down browse element.
+    '''
+    browse_controls = driver.find_element_by_css_selector(r'#browseControls')
+    labels = browse_controls.find_elements_by_css_selector('label')
+    labels = tuple([label.text for label in labels])
+
+    return labels
 
 
 def drop_down(driver, xpaths_bl, option_names=[]):
     global urls
     if not xpaths_bl:
-        driver, urls_dict = collect_urls(driver, urls, option_names)
+        xpath_level_name           = xpaths_bl[0] + r'/label'
+        driver, url_key, urls_dict = collect_urls(driver, urls, option_names)
+        labels = get_browse_labels(driver)
+        url_key = tuple(zip(labels, url_key))
         # Update urls with date-ranges and hrefs
         urls[url_key] = urls_dict
     else:
-        xpath_level_name           = xpaths_bl[0] + r'/label'
         xpath_select               = xpaths_bl[0] + r'/div/select'
         xpath_options              = xpath_select + r'/option'
-        x = True
+        no_success = True
         # Sometimes, webpage becomes stuck loading the next options drop-down box. If this happens, refresh and try again.
-        while x:
+        while no_success:
             try:
                 highest_level_options = WebDriverWait(driver, 10).until(EC.presence_of_all_elements_located((By.XPATH, xpath_options)))[1:]
-                x = False
+                no_success = False
             except:
                 driver.refresh()
                 continue
         highest_level_option_names = [option.text for option in highest_level_options]
+        option_label = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH, xpath_options))).text
         for option, option_name in zip(highest_level_options, highest_level_option_names):
             driver = when_dom_static(driver, xpath_select, timeout=15, to_send='click')
             driver = when_dom_static(driver, xpath_select, timeout=15, to_send=Keys.DOWN)
@@ -275,7 +291,7 @@ class AncestryScraper:
 
     def __init__(self):
         self.authenticated_driver = None
-        self.county_urls = None
+        self.collection_urls = None
 
     def authenticate(self):
         '''
@@ -308,9 +324,11 @@ class AncestryScraper:
     def get_parish_urls(self, driver, collection_code):
         '''
         Collects the urls to the image viewer pages with transcribed records for collection with code 'collection_code'.
-        Updates self.county_urls to be a dictionary: {<record place and/or type> (tuple) : {<year range> : <url>} (dict)}
+        Updates self.collection_urls to be a dictionary: {<record place and/or type> (tuple) : {<year range> : <url>} (dict)}
         Returns WebDriver.Chrome at welcome page.
         '''
+        if not self.authenticated_driver:
+            raise AuthenticationError('Please authenticate before attempting to collect urls.')
         # Go to collection url
         url_collection = r'https://www.ancestry.co.uk/search/collections/{}/'.format(collection_code)
         driver.get(url_collection)
@@ -323,10 +341,37 @@ class AncestryScraper:
         xpaths_bl = [r'//*[@id="browseControls"]/div[{}]'.format(i) for i in range(1, len(browse_levels) + 1)]
         urls = {}
         driver, urls = drop_down(driver, xpaths_bl)
-        self.county_urls = urls
+        self.collection_urls = urls
         driver.get(r'https://www.ancestry.co.uk')
 
         return driver
+
+    def scrape_collection(self):
+        '''
+        Scrapes all records in a collection with urls contained in self.collection_urls.
+        Returns Pandas.DataFrame.
+        '''
+        if not self.authenticated_driver:
+            raise AuthenticationError('Please authenticate before attempting to collect urls.')
+        else:
+            driver = self.authenticated_driver
+        series_urls = self.collection_urls
+        if not series_urls:
+            return None
+        collection_dfs = []
+        for labels, url_dict in series_urls.items():
+            record_dfs = []
+            for date_range, url in url_dict.items():
+                driver, df_record = scrape_record(driver, url)
+                df_record.insert(0, 'Record Date Range', date_range) 
+                record_dfs.append(df_record)
+            df_label = pd.concat(record_dfs, axis=0, ignore_index=True)
+            for label_name, label_value in labels[::-1]:
+                df_label.insert(0, label_name, label_value)
+            collection_dfs.append(df_label)
+        df_collection = pd.concat(collection_dfs, axis=0, ignore_index=True)
+
+        return df_collection   
 
     def shut_down(self):
         '''
@@ -337,4 +382,5 @@ class AncestryScraper:
             driver.close()
         
         return None
+
 
