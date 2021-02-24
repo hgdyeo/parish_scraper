@@ -1,2 +1,2 @@
-from . import ancestry
-from . import family_search
+from .ancestry import AncestryScraper
+from .family_search import FamilySearchScraper

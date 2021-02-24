@@ -5,7 +5,7 @@ Created: 2021-01-20
 Class: FamilySearchScraper.
 A selenium-based webscraping bot which gathers burial data from FamilySearch.org.
 '''
-
+#%%
 import numpy as np
 import pandas as pd
 import requests
@@ -271,3 +271,83 @@ class FamilySearchScraper:
         return None
 
 
+#%%
+bot = FamilySearchScraper().authenticate()
+bot.get(r'https://www.familysearch.org/search/record/results?q.deathLikePlace=hcjhfbvdhjfbv&q.deathLikePlace.exact=on&q.deathLikeDate.from=1538&q.deathLikeDate.to=1730&count=100&offset=0&m.defaultFacets=on&m.queryRequireDefault=on&m.facetNestCollectionInCategory=on')
+
+
+# %%
+def get_burial_records(driver, place_name, year_from, year_to):
+    '''
+    Scrapes Name and Burial columns from FamilySearch.org records 
+    for place_name, between year_from and year_to inclusive.
+    Returns: pandas.DataFrame with columns ('Name', 'Date')
+    '''
+
+    list_dfs = []
+    for year in range(year_from, year_to + 1):
+        
+        dfs_year = []
+        more_pages = True
+        offset = 0
+        max_offset = False
+        
+        while more_pages:
+            params = {
+                    'q.deathLikePlace'                : '{}'.format(place_name),
+                    'q.deathLikePlace.exact'          : 'on',
+                    'q.deathLikeDate.from'            : '{}'.format(year),
+                    'q.deathLikeDate.to'              : '{}'.format(year),
+                    'm.defaultFacets'                 : 'on',
+                    'm.queryRequireDefault'           : 'on',
+                    'm.facetNestCollectionInCategory' : 'on',
+                    'count'                           : '100',
+                    'offset'                          : '{}'.format(offset)
+                    }
+            base_results_url  = r'https://www.familysearch.org/search/record/results/?'
+            query_results_url = base_results_url + urlencode(params)
+            driver.get(query_results_url)
+            shadow = QuietShadow(driver)
+            section_right = shadow.find_element(r'div > section.right')
+            spinner = shadow.find_element(section_right, r'fs-spinner')
+            table_displayed = WebDriverWait(driver, 10).until(lambda x : bool(spinner.get_attribute('style')))
+            try:
+                shadow.find_element(section_right, r'div.fs-alert')
+                driver.refresh()
+            except:
+                try:
+                    max_offset = get_max_offset(shadow)
+                except:
+                    break
+            
+            sr_table = shadow.find_element(r'div.table')
+                
+            table_data = scrape_table(shadow, sr_table)
+
+            # Make DataFrame:
+            df = pd.DataFrame(table_data)
+            dfs_year.append(df)
+            print('year: ', year)
+            print('len(df): ', len(df))
+
+            offset += 100
+            more_pages = (offset <= max_offset)
+            
+        # If there are any results for that year, concatenate them and append to list_dfs
+        if dfs_year:
+            df_year = pd.concat(dfs_year, axis=0, ignore_index=True)
+            list_dfs.append(df_year)
+
+    # If search query returned any results, concatenate them:
+    if list_dfs:    
+        df_all = pd.concat(list_dfs, axis=0, ignore_index=True)
+    else:
+        df_all = pd.DataFrame()
+
+    return df_all 
+# %%
+#driver = FamilySearchScraper().authenticate()
+get_burial_records(driver, 'lincolnshire edlington', 1634, 1650)
+
+
+# %%
