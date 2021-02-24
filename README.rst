@@ -33,11 +33,17 @@ FamilySearch.org
 Ancestry.co.uk
 ==============
 WARNING: automated software such as this violates Ancestry's use of services agreement. 
+Usage of this software is at the users own risk and the user accepts all liability.
 
+1. add environment variables: ``ANC_USERNAME`` and ``ANC_PASSWORD``.
+2. as code:
+  ``bot = AncestryScraper()``
+  
+  ``bot.authenticate()``
+  
+  ``bot.get_parish_urls(<collection_code>)``
+  
+  ``bot.scrape_collection()``
 To-do:
 ======
-- Include location in FamilySearch scraped data
-- Ancestry bot
 - Tests
-
-
