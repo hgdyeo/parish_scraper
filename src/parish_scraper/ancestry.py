@@ -134,43 +134,6 @@ def get_browse_labels(driver):
     return labels
 
 
-def drop_down(driver, xpaths_bl, option_names=[]):
-    global urls
-    if not xpaths_bl:
-        xpath_level_name           = xpaths_bl[0] + r'/label'
-        driver, url_key, urls_dict = collect_urls(driver, urls, option_names)
-        labels = get_browse_labels(driver)
-        url_key = tuple(zip(labels, url_key))
-        # Update urls with date-ranges and hrefs
-        urls[url_key] = urls_dict
-    else:
-        xpath_select               = xpaths_bl[0] + r'/div/select'
-        xpath_options              = xpath_select + r'/option'
-        no_success = True
-        # Sometimes, webpage becomes stuck loading the next options drop-down box. If this happens, refresh and try again.
-        while no_success:
-            try:
-                highest_level_options = WebDriverWait(driver, 10).until(EC.presence_of_all_elements_located((By.XPATH, xpath_options)))[1:]
-                no_success = False
-            except:
-                driver.refresh()
-                continue
-        highest_level_option_names = [option.text for option in highest_level_options]
-        option_label = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH, xpath_options))).text
-        for option, option_name in zip(highest_level_options, highest_level_option_names):
-            driver = when_dom_static(driver, xpath_select, timeout=15, to_send='click')
-            driver = when_dom_static(driver, xpath_select, timeout=15, to_send=Keys.DOWN)
-            driver = when_dom_static(driver, xpath_select, timeout=15, to_send=Keys.ENTER)
-            option_names_copy = option_names.copy()
-            option_names_copy.append(option_name)
-            if xpaths_bl[:-1]:
-                drop_down(driver, xpaths_bl[1:], option_names_copy)
-            else:
-                drop_down(driver, xpaths_bl[:-1], option_names_copy)
-    
-    return driver, urls
-
-
 def get_useful_elements(driver):
     '''
     Returns a dictionary of useful image viewer page elements.
@@ -359,13 +322,51 @@ class AncestryScraper:
         driver.get(url_collection)
         # Check the "Browse this collection" box is displayed.
         xpath_browse_box = r'//*[@id="divBrowse"]'
+        xpath_browse_level = r'//*[@id="browseControls"]/div'
         try:
             browse_box = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH, xpath_browse_box)))
+            browse_levels = WebDriverWait(driver, 10).until(EC.presence_of_all_elements_located((By.XPATH, xpath_browse_level)))
         except:
             raise NotFoundError('Either {} is not a valid ID or the collection cannot be browsed in the image viewer.')
         xpaths_bl = [r'//*[@id="browseControls"]/div[{}]'.format(i) for i in range(1, len(browse_levels) + 1)]
         urls = {}
-        driver, urls = drop_down(driver, xpaths_bl)
+
+        def _drop_down(driver, xpaths_bl, option_names=[]):
+            nonlocal urls
+            if not xpaths_bl:
+                driver, url_key, urls_dict = collect_urls(driver, urls, option_names)
+                labels = get_browse_labels(driver)
+                url_key = tuple(zip(labels, url_key))
+                # Update urls with date-ranges and hrefs
+                urls[url_key] = urls_dict
+            else:
+                xpath_select               = xpaths_bl[0] + r'/div/select'
+                xpath_options              = xpath_select + r'/option'
+                no_success = True
+                # Sometimes, webpage becomes stuck loading the next options drop-down box. If this happens, refresh and try again.
+                while no_success:
+                    try:
+                        highest_level_options = WebDriverWait(driver, 10).until(EC.presence_of_all_elements_located((By.XPATH, xpath_options)))[1:]
+                        no_success = False
+                    except:
+                        driver.refresh()
+                        continue
+                highest_level_option_names = [option.text for option in highest_level_options]
+                option_label = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH, xpath_options))).text
+                for option, option_name in zip(highest_level_options, highest_level_option_names):
+                    driver = when_dom_static(driver, xpath_select, timeout=15, to_send='click')
+                    driver = when_dom_static(driver, xpath_select, timeout=15, to_send=Keys.DOWN)
+                    driver = when_dom_static(driver, xpath_select, timeout=15, to_send=Keys.ENTER)
+                    option_names_copy = option_names.copy()
+                    option_names_copy.append(option_name)
+                    if xpaths_bl[:-1]:
+                        _drop_down(driver, xpaths_bl[1:], option_names_copy)
+                    else:
+                        _drop_down(driver, xpaths_bl[:-1], option_names_copy)
+            
+            return driver, urls
+
+        driver, urls = _drop_down(driver, xpaths_bl)
         self.collection_urls = urls
         driver.get(r'https://www.ancestry.co.uk')
 
