@@ -322,7 +322,6 @@ class AncestryScraper:
     def authenticate(self):
         '''
         Boots up a chrome webdriver with minimal detectability, signs into ancestry, accepting cookies.
-        Returns WebDriver.Chrome at welcome page.
         '''
         # Sign in details
         USERNAME = os.getenv('ANC_USERNAME', None)
@@ -347,14 +346,14 @@ class AncestryScraper:
             
         return 
 
-    def get_parish_urls(self, driver, collection_code):
+    def get_parish_urls(self, collection_code):
         '''
         Collects the urls to the image viewer pages with transcribed records for collection with code 'collection_code'.
-        Updates self.collection_urls to be a dictionary: {<record place and/or type> (tuple) : {<year range> : <url>} (dict)}
-        Returns WebDriver.Chrome at welcome page.
+        Updates self.collection_urls to be a dictionary: {<record place and/or type> (tuple) : {<year range> : <url>} (dict)}.
         '''
         if not self.authenticated_driver:
             raise AuthenticationError('Please authenticate before attempting to collect urls.')
+        driver = self.authenticated_driver
         # Go to collection url
         url_collection = r'https://www.ancestry.co.uk/search/collections/{}/'.format(collection_code)
         driver.get(url_collection)
@@ -370,22 +369,7 @@ class AncestryScraper:
         self.collection_urls = urls
         driver.get(r'https://www.ancestry.co.uk')
 
-        return driver
-
-    def scrape_collection(self, n_jobs=1):
-        '''
-        Scrapes all records in a collection with urls contained in self.collection_urls.
-        Returns Pandas.DataFrame.
-        '''
-        if not self.authenticated_driver:
-            raise AuthenticationError('Please authenticate before attempting to collect urls.')
-        else:
-            driver = self.authenticated_driver
-        collection_urls = self.collection_urls
-        if not collection_urls:
-            return None
-        
-        scraped_dfs = []
+        return urls
 
     def scrape_collection(self):
         '''
@@ -422,5 +406,5 @@ class AncestryScraper:
         if driver:
             driver.close()
         
-        return None
+        return 
 # %%
