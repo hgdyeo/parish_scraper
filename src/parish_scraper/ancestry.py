@@ -18,6 +18,13 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.common.exceptions import NoSuchElementException, StaleElementReferenceException
 
 
+class AuthenticationError(Exception):
+    pass
+
+
+class NotFoundError(Exception):
+    pass
+
 
 def boot_up_driver():
     '''
@@ -57,7 +64,7 @@ def sign_in(driver, username, password):
     Signs into ancestry.
     '''
     # Switch to sign in iframe
-    iframe_xpath = r'/html/body/main/div/div/section/div/div/div[2]/div[1]/iframe'
+    iframe_xpath = r'//*[@id="signInFrame"]'
     frames = WebDriverWait(driver, 10).until(EC.presence_of_all_elements_located((By.XPATH,iframe_xpath)))
     if frames[0].is_displayed(): 
         driver.switch_to.frame(frames[0])
@@ -70,7 +77,7 @@ def sign_in(driver, username, password):
         pw_box = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH,xpath_pw)))
         pw_box.send_keys(password)
         # Click sign in 
-        xpath_sign_in = r'/html/body/main/form/div/div[3]/button'
+        xpath_sign_in = r'//*[@id="signInBtn"]'
         sign_in_button = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH,xpath_sign_in)))
         sign_in_button.click()
     else:
@@ -408,4 +415,3 @@ class AncestryScraper:
             driver.close()
         
         return 
-# %%
