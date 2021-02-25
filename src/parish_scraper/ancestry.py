@@ -111,7 +111,7 @@ def when_dom_static(driver, xpath, timeout=15, to_send='click'):
     return driver
 
 
-def collect_urls(driver, urls, option_names):
+def collect_urls(driver, option_names):
     '''
     Once visible, collect the urls for image viewers for the given option names.
     Returns driver, url_key (tuple), urls_dict (dict: {<date range> : <url>,...}).
