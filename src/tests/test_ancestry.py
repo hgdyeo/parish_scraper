@@ -18,7 +18,6 @@ class Store:
                         </body></html>
                         '''
 #==============================================================================
-
 #============================test_sign_in======================================
     mock_html_iframe = '''
                         <html>
@@ -34,7 +33,19 @@ class Store:
                         </iframe></div></body></html>
                        '''
 #==============================================================================
-
+#============================test_collect_urls=================================
+    base_url = r'http:/127.0.0.1:1337'
+    mock_urls_html = '''
+                     <html><div id="divBL_4"><div><ul>
+                     <li><a href="/hello/example">hello example</a></li>
+                     <li><a href="/world/whatever">world whatever<a></li>
+                     </ul></div></div></html>
+                     '''
+    expected_url_key = ('hello', 'world', '123', 'abc')
+    expected_urls_dict = {'hello example': 'http://127.0.0.1:1337/hello/example', 
+                          'world whatever': 'http://127.0.0.1:1337/world/whatever'}
+    mock_option_names = ['hello', 'world', '123', 'abc']
+#==============================================================================
 
 store = Store()
 
@@ -63,8 +74,13 @@ def scraper_server():
             html = store.mock_html_signin
         return html
 
+    @app.route('/urls', methods=['GET', 'POST'])
+    def display_urls():
+        return store.mock_urls_html
+
     with server.run():
         yield server
+
 
 class MockInputElement(selenium.webdriver.remote.webelement.WebElement):
 
@@ -101,5 +117,15 @@ def test_sign_in_exception(scraper_server):
     driver.get(r'http://127.0.0.1:1337/')
     with pytest.raises(AuthenticationError):
         driver = sign_in(driver, username='hello', password='world')
+    driver.close()
+
+
+def test_collect_urls(scraper_server):
+    driver = webdriver.Chrome()
+    driver.get(r'http://127.0.0.1:1337/urls')
+    driver, url_key, urls_dict = collect_urls(driver, store.mock_option_names)
+    assert url_key == store.expected_url_key
+    print(urls_dict)
+    assert urls_dict == store.expected_urls_dict
     driver.close()
 
