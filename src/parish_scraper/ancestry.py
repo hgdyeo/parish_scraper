@@ -65,22 +65,25 @@ def sign_in(driver, username, password):
     '''
     # Switch to sign in iframe
     iframe_xpath = r'//*[@id="signInFrame"]'
-    frames = WebDriverWait(driver, 10).until(EC.presence_of_all_elements_located((By.XPATH,iframe_xpath)))
-    if frames[0].is_displayed(): 
-        driver.switch_to.frame(frames[0])
-        #Enter username
-        xpath_un = r'//*[@id="username"]'
-        un_box = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH,xpath_un)))
-        un_box.send_keys(username)
-        # Enter password
-        xpath_pw = r'//*[@id="password"]'
-        pw_box = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH,xpath_pw)))
-        pw_box.send_keys(password)
-        # Click sign in 
-        xpath_sign_in = r'//*[@id="signInBtn"]'
-        sign_in_button = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH,xpath_sign_in)))
-        sign_in_button.click()
-    else:
+    try:
+        frames = WebDriverWait(driver, 10).until(EC.presence_of_all_elements_located((By.XPATH,iframe_xpath)))
+        if frames[0].is_displayed(): 
+            driver.switch_to.frame(frames[0])
+            #Enter username
+            xpath_un = r'//*[@id="username"]'
+            un_box = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH,xpath_un)))
+            un_box.send_keys(username)
+            # Enter password
+            xpath_pw = r'//*[@id="password"]'
+            pw_box = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH,xpath_pw)))
+            pw_box.send_keys(password)
+            # Click sign in 
+            xpath_sign_in = r'//*[@id="signInBtn"]'
+            sign_in_button = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH,xpath_sign_in)))
+            sign_in_button.click()
+        else:
+            raise Exception
+    except:
         raise AuthenticationError('Could not find sign-in box.')
 
     return driver
