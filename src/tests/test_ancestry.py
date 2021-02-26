@@ -1,6 +1,8 @@
 import pytest
 import selenium
 import mock
+import numpy as np
+import pandas as pd
 
 from flask import Flask, request
 from parish_scraper.ancestry import *
@@ -58,16 +60,22 @@ class Store:
     expected_labels = ('Hello', 'World', 'Example', 'Whatever')
 #==============================================================================
 #============================test_get_useful_elements==========================
-    mock_elements_html = '''
-                         <html>
-                         <div class="paging-wrapper" id="buttonsPanel">
-                         <button>Table</button>
-                         <span class="imageCountText middle">123</span>
-                         </div>
-                         <button class="page">Next Page</button>
-                         <div class="index-panel">Index Panel</div>
-                         </html>
-                         '''
+    def display(table_button='', next_page_button='', grid_container_html=''):
+        html = '''
+                <html>
+                <div class="paging-wrapper" id="buttonsPanel">
+                <button {}>Table</button>
+                <span class="imageCountText middle">123</span>
+                </div>
+                <button class="page" {}>Next Page</button>
+                <div class="index-panel">Index Panel
+                <div class="grid-container">{}</div>
+                </div>
+                </html>
+                '''.format(table_button, next_page_button, grid_container_html)
+        return html
+
+    mock_elements_html = display()
 
     expected_paging_wrapper_id = 'buttonsPanel'
 
@@ -77,8 +85,49 @@ class Store:
                               'num_pages'        : '123',
                               'index_panel'      : 'Index Panel'}
 #==============================================================================
+#============================test_get_useful_elements==========================
+    mock_enabled_html = display('', '', '<div>Hello World</div>')
+    mock_disabled_html = display('disabled', '', '<div>Disabled Button</div>')
+    expected_gc_html = '<div>Hello World</div>'
+#==============================================================================
+#============================test_get_useful_elements==========================
+#%%
+    def generate_table_html(data):
+        rows = []
+        for row in data:
+            cells = []
+            for cell in row:
+                cell_html = '<div>{}</div>'.format(cell)
+                cells.append(cell_html)
+            row_html = '<div class="grid-row">{}</div>'.format(''.join(cells))
+            rows.append(row_html)
+        table_html = ''.join(rows)
+        return table_html
+#%%
+    mock_table_html = generate_table_html((('Test Column 1', 'Test Column 2', 'Test Column 3'), 
+                                            ('Hello', 'Test', '123'),
+                                            ('World', 'Example', 'abc')))
 
+    expected_table_df = pd.DataFrame({'Test Column 1' : ['Hello', 'World'],
+                                      'Test Column 2' : ['Test', 'Example'],
+                                      'Test Column 3' : ['123', 'abc']})                                    
+#==============================================================================
+#============================test_get_useful_elements==========================
+    mock_p2_table_html = generate_table_html((('Test Column 1', 'Test Column 2', 'Test Column 3', 'Test Column 4'), 
+                                            ('Goodbye', 'Whatever', '987', 'True'),
+                                            ('Universe', 'Mock', 'xyz', 'False')))
 
+    on_click = '''
+               onclick="location.href='http://127.0.0.1:1337/imageviewer?page=2'" type="button"
+               '''
+
+    mock_p1_html = display('', on_click, mock_table_html)
+    mock_p2_html = display('', 'disabled', mock_p2_table_html)
+    expected_df_concat = pd.DataFrame({'Test Column 1' : ['Hello', 'World', 'Goodbye', 'Universe'],
+                                       'Test Column 2' : ['Test', 'Example', 'Whatever', 'Mock'],
+                                       'Test Column 3' : ['123', 'abc', '987', 'xyz'],
+                                       'Test Column 4' : [np.nan, np.nan, 'True', 'False']}) 
+#==============================================================================
 store = Store()
 
 @pytest.fixture(scope="module")
@@ -118,10 +167,22 @@ def scraper_server():
     @app.route('/imageviewer')
     def display_image_viewer():
         is_table = request.args.get('table')
-        if is_table:
-            pass
-        else:
-            html = store.mock_elements_html
+        button   = request.args.get('button')
+        page     = request.args.get('page')
+        if page == '0':
+            if is_table:
+                pass
+            else:
+                if button == 'enabled':
+                    html = store.mock_enabled_html
+                elif button == 'disabled':
+                    html = store.mock_disabled_html
+                else:
+                    html = store.mock_elements_html
+        elif page == '1':
+            html = store.mock_p1_html
+        elif page == '2':
+            html = store.mock_p2_html
         return html
 
     with server.run():
@@ -186,7 +247,7 @@ def test_get_browse_labels(scraper_server):
 
 def test_get_useful_elements(scraper_server):
     driver = webdriver.Chrome()
-    driver.get(r'http://127.0.0.1:1337/imageviewer')
+    driver.get(r'http://127.0.0.1:1337/imageviewer?page=0')
     elements = get_useful_elements(driver)
     assert elements.keys() == store.expected_elements_text.keys()
     for key, element in elements.items():
@@ -197,3 +258,26 @@ def test_get_useful_elements(scraper_server):
     driver.close()
 
 
+def test_get_table_html(scraper_server):
+    driver = webdriver.Chrome()
+    driver.get(r'http://127.0.0.1:1337/imageviewer?page=0&button=enabled')
+    elements = get_useful_elements(driver)
+    driver, gc_html = get_table_html(driver, **elements)
+    assert gc_html == store.expected_gc_html
+    driver.get(r'http://127.0.0.1:1337/imageviewer?page=0&button=disabled')
+    elements = get_useful_elements(driver)
+    driver, gc_html = get_table_html(driver, **elements)
+    assert gc_html is None
+    driver.close()
+
+
+def test_make_grid_container_df(scraper_server):
+    actual_df = make_grid_container_df(store.mock_table_html)
+    assert actual_df.equals(store.expected_table_df)
+
+
+def test_scrape_record(scraper_server):
+    driver = webdriver.Chrome()
+    driver, df_concat = scrape_record(driver, r'http://127.0.0.1:1337/imageviewer?page=1')
+    assert df_concat.equals(store.expected_df_concat)
+    driver.close()
