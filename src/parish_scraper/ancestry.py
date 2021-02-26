@@ -233,6 +233,7 @@ def scrape_record(driver, record_url):
     # Scrape the grid containers
     while not_last_page:
         elements                    = get_useful_elements(driver)
+        next_page_button            = elements['next_page_button']
         driver, grid_container_html = get_table_html(driver, **elements)
         if grid_container_html and grid_container_html != prev_grid_container:
             grid_containers.append(grid_container_html)
@@ -418,3 +419,4 @@ class AncestryScraper:
             driver.close()
         
         return 
+
