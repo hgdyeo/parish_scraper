@@ -46,6 +46,38 @@ class Store:
                           'world whatever': 'http://127.0.0.1:1337/world/whatever'}
     mock_option_names = ['hello', 'world', '123', 'abc']
 #==============================================================================
+#============================test_get_browse_levels============================
+    mock_bc_html = '''
+                   <html><div id="browseControls">
+                   <label>Hello</label>
+                   <label>World</label>
+                   <label>Example</label>
+                   <label>Whatever</label>
+                   </div></html>
+                   '''
+    expected_labels = ('Hello', 'World', 'Example', 'Whatever')
+#==============================================================================
+#============================test_get_useful_elements==========================
+    mock_elements_html = '''
+                         <html>
+                         <div class="paging-wrapper" id="buttonsPanel">
+                         <button>Table</button>
+                         <span class="imageCountText middle">123</span>
+                         </div>
+                         <button class="page">Next Page</button>
+                         <div class="index-panel">Index Panel</div>
+                         </html>
+                         '''
+
+    expected_paging_wrapper_id = 'buttonsPanel'
+
+    expected_elements_text = {'buttons_panel'    : 'Table 123',
+                              'table_button'     : 'Table',
+                              'next_page_button' : 'Next Page',
+                              'num_pages'        : '123',
+                              'index_panel'      : 'Index Panel'}
+#==============================================================================
+
 
 store = Store()
 
@@ -76,11 +108,25 @@ def scraper_server():
 
     @app.route('/urls', methods=['GET', 'POST'])
     def display_urls():
-        return store.mock_urls_html
+        browse = request.args.get('browse')
+        if browse:
+            html = store.mock_bc_html
+        else:
+            html = store.mock_urls_html
+        return html
+
+    @app.route('/imageviewer')
+    def display_image_viewer():
+        is_table = request.args.get('table')
+        if is_table:
+            pass
+        else:
+            html = store.mock_elements_html
+        return html
 
     with server.run():
         yield server
-
+    
 
 class MockInputElement(selenium.webdriver.remote.webelement.WebElement):
 
@@ -128,4 +174,26 @@ def test_collect_urls(scraper_server):
     print(urls_dict)
     assert urls_dict == store.expected_urls_dict
     driver.close()
+
+
+def test_get_browse_labels(scraper_server):
+    driver = webdriver.Chrome()
+    driver.get(r'http://127.0.0.1:1337/urls?browse=True')
+    labels = get_browse_labels(driver)
+    assert labels == store.expected_labels
+    driver.close()
+
+
+def test_get_useful_elements(scraper_server):
+    driver = webdriver.Chrome()
+    driver.get(r'http://127.0.0.1:1337/imageviewer')
+    elements = get_useful_elements(driver)
+    assert elements.keys() == store.expected_elements_text.keys()
+    for key, element in elements.items():
+        if key == 'num_pages':
+            assert element == store.expected_elements_text[key]
+        else:
+            assert element.text == store.expected_elements_text[key]
+    driver.close()
+
 
