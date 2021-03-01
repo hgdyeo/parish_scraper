@@ -199,54 +199,46 @@ class MockInputElement(selenium.webdriver.remote.webelement.WebElement):
         assert self.get_attribute('value') == value
         return
 
+driver = webdriver.Chrome()
 
 def test_accept_cookies(scraper_server):
-    driver = webdriver.Chrome()
+    global driver
     driver.get(r'http://127.0.0.1:1337/?cookies=notAccepted')
     driver = accept_cookies(driver)
     p_success = driver.find_element_by_css_selector('p')
     assert p_success.text == 'success'
-    driver.close()
+
 
 
 @mock.patch('selenium.webdriver.remote.webelement.WebElement', side_effect=MockInputElement)
 def test_sign_in(scraper_server):
-    driver = webdriver.Chrome()
+    global driver
     driver.get(r'http://127.0.0.1:1337/signin')
     driver = sign_in(driver, username='hello', password='world')
     p_success = driver.find_element_by_css_selector('p')
     assert p_success.text == 'success'
-    driver.close()
 
-
-def test_sign_in_exception(scraper_server):
-    driver = webdriver.Chrome()
-    driver.get(r'http://127.0.0.1:1337/')
-    with pytest.raises(AuthenticationError):
-        driver = sign_in(driver, username='hello', password='world')
-    driver.close()
 
 
 def test_collect_urls(scraper_server):
-    driver = webdriver.Chrome()
+    global driver
     driver.get(r'http://127.0.0.1:1337/urls')
     driver, url_key, urls_dict = collect_urls(driver, store.mock_option_names)
     assert url_key == store.expected_url_key
     print(urls_dict)
     assert urls_dict == store.expected_urls_dict
-    driver.close()
+
 
 
 def test_get_browse_labels(scraper_server):
-    driver = webdriver.Chrome()
+    global driver
     driver.get(r'http://127.0.0.1:1337/urls?browse=True')
     labels = get_browse_labels(driver)
     assert labels == store.expected_labels
-    driver.close()
 
 
 def test_get_useful_elements(scraper_server):
-    driver = webdriver.Chrome()
+    global driver
     driver.get(r'http://127.0.0.1:1337/imageviewer?page=0')
     elements = get_useful_elements(driver)
     assert elements.keys() == store.expected_elements_text.keys()
@@ -255,11 +247,11 @@ def test_get_useful_elements(scraper_server):
             assert element == store.expected_elements_text[key]
         else:
             assert element.text == store.expected_elements_text[key]
-    driver.close()
+
 
 
 def test_get_table_html(scraper_server):
-    driver = webdriver.Chrome()
+    global driver
     driver.get(r'http://127.0.0.1:1337/imageviewer?page=0&button=enabled')
     elements = get_useful_elements(driver)
     driver, gc_html = get_table_html(driver, **elements)
@@ -268,16 +260,19 @@ def test_get_table_html(scraper_server):
     elements = get_useful_elements(driver)
     driver, gc_html = get_table_html(driver, **elements)
     assert gc_html is None
-    driver.close()
 
 
-def test_make_grid_container_df(scraper_server):
+def test_make_grid_container_df():
     actual_df = make_grid_container_df(store.mock_table_html)
     assert actual_df.equals(store.expected_table_df)
 
 
 def test_scrape_record(scraper_server):
-    driver = webdriver.Chrome()
+    global driver
     driver, df_concat = scrape_record(driver, r'http://127.0.0.1:1337/imageviewer?page=1')
     assert df_concat.equals(store.expected_df_concat)
+
+
+def test_close():
+    global driver
     driver.close()
