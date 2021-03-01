@@ -8,6 +8,7 @@ A selenium-based webscraping bot which gathers parish records from Ancestry.co.u
 
 import os
 import pandas as pd
+import time
 
 from bs4 import BeautifulSoup
 from selenium import webdriver   
@@ -24,6 +25,18 @@ class AuthenticationError(Exception):
 
 class NotFoundError(Exception):
     pass
+
+
+class Timer():
+    def __init__(self):
+        self.created_time = time.time()
+        
+    @property
+    def time_elapsed(self):
+        return time.time() - self.created_time
+    
+    def reset_time(self):
+        self.created_time = time.time()
 
 
 def boot_up_driver():
@@ -173,6 +186,12 @@ def get_useful_elements(driver):
     return elements
 
 
+def get_next_page_button(driver):
+        next_page_button = WebDriverWait(driver, 10).until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, r'button.page')))[-1]
+        not_last_page = next_page_button.is_enabled()
+        return next_page_button, not_last_page
+
+
 def get_table_html(driver, **kwargs):
     '''
     For a given image viewer page, returns the inner html of the grid container.
@@ -229,25 +248,41 @@ def scrape_record(driver, record_url):
 
     grid_containers  = []
     df_list          = []
+    grid_container_html = None
     prev_grid_container = None     
+    
+    # Start timer
+    timer = Timer()
+
     # Scrape the grid containers
     while not_last_page:
-        elements                    = get_useful_elements(driver)
-        next_page_button            = elements['next_page_button']
-        driver, grid_container_html = get_table_html(driver, **elements)
-        if grid_container_html and grid_container_html != prev_grid_container:
-            grid_containers.append(grid_container_html)
-            prev_grid_container = grid_container_html
-            not_last_page       = next_page_button.is_enabled()
+        if timer.time_elapsed >= 5:
+            timer.reset_time()
+            next_page_button, not_last_page = get_next_page_button(driver)
             if not_last_page:
                 next_page_button.click()
-        else:
+                continue
+            else:
+                break
+        elements                    = get_useful_elements(driver)
+        driver, grid_container_html = get_table_html(driver, **elements)
+        if grid_container_html == prev_grid_container:
             continue
+        else:
+            next_page_button, not_last_page = get_next_page_button(driver)
+            prev_grid_container = grid_container_html
+            grid_containers.append(grid_container_html)
+            if not_last_page:
+                next_page_button.click()
+                timer.reset_time()
+            else:
+                break
 
     # Now use BeautifulSoup to turn the html into a dataframe
     for grid_container in grid_containers:
-        df = make_grid_container_df(grid_container)
-        df_list.append(df)
+        if grid_container:
+            df = make_grid_container_df(grid_container)
+            df_list.append(df)
 
     # Concatenate all dataframes into a final dataframe
     if df_list:
@@ -256,32 +291,6 @@ def scrape_record(driver, record_url):
         df_concat = pd.DataFrame([], columns = [])
 
     return driver, df_concat
-
-
-def sort_dict(dictionary):
-    '''
-    Sorts dictionary by length of value.
-    '''
-    def my_key(element):
-        return len(element[-1])
-
-    list_dict = list(dictionary.items())
-    list_dict.sort(key=my_key)
-    sorted_dict = dict(list_dict)
-    
-    return sorted_dict
-
-
-def partition_dict(dictionary, n_partitions):
-    '''
-    Partitions a dictionary into n_partitions of approximately equal length.
-    '''
-    list_of_dicts = [[] for i in range(n_partitions)]
-    for i, item in enumerate(dictionary.items()):
-        list_of_dicts[i % n_partitions].append(item)
-    list_of_dicts = [dict(d) for d in list_of_dicts]
-    
-    return list_of_dicts
 
 
 class AncestryScraper:
@@ -402,11 +411,17 @@ class AncestryScraper:
                 driver, df_record = scrape_record(driver, url)
                 df_record.insert(0, 'Record Date Range', date_range) 
                 record_dfs.append(df_record)
-            df_label = pd.concat(record_dfs, axis=0, ignore_index=True)
+            if record_dfs:
+                df_label = pd.concat(record_dfs, axis=0, ignore_index=True)
+            else:
+                df_label = pd.DataFrame()
             for label_name, label_value in labels[::-1]:
                 df_label.insert(0, label_name, label_value)
             collection_dfs.append(df_label)
-        df_collection = pd.concat(collection_dfs, axis=0, ignore_index=True)
+        if collection_dfs:
+            df_collection = pd.concat(collection_dfs, axis=0, ignore_index=True)
+        else:
+            df_collection = pd.DataFrame()
 
         return df_collection  
 
@@ -419,4 +434,3 @@ class AncestryScraper:
             driver.close()
         
         return 
-
