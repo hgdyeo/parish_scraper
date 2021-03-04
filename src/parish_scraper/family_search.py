@@ -271,11 +271,6 @@ class FamilySearchScraper:
         return None
 
 
-#%%
-bot = FamilySearchScraper().authenticate()
-bot.get(r'https://www.familysearch.org/search/record/results?q.deathLikePlace=hcjhfbvdhjfbv&q.deathLikePlace.exact=on&q.deathLikeDate.from=1538&q.deathLikeDate.to=1730&count=100&offset=0&m.defaultFacets=on&m.queryRequireDefault=on&m.facetNestCollectionInCategory=on')
-
-
 # %%
 def get_burial_records(driver, place_name, year_from, year_to):
     '''
@@ -345,9 +340,3 @@ def get_burial_records(driver, place_name, year_from, year_to):
         df_all = pd.DataFrame()
 
     return df_all 
-# %%
-#driver = FamilySearchScraper().authenticate()
-get_burial_records(driver, 'lincolnshire edlington', 1634, 1650)
-
-
-# %%
