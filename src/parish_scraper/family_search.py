@@ -43,7 +43,7 @@ def boot_up_driver():
     option.add_argument('--disable-blink-features=AutomationControlled')
     # Change resolution and user-agent
     option.add_argument("window-size=1280,800")
-    option.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/74.0.3729.169 Safari/537.36")
+    option.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/88.0.4324.192 Safari/537.36")
     #Open Browser
     driver = webdriver.Chrome(executable_path='chromedriver.exe',options=option)
     driver.maximize_window()
